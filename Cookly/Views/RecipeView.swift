@@ -14,6 +14,7 @@ struct StarsView: View{
         }
     }
 }
+
 struct ReviewView: View{
     var stars: CGFloat = 0.0
     var body: some View {
@@ -52,9 +53,19 @@ struct ReviewView: View{
 struct RecipeView: View {
     @ObservedObject var recipesViewModel = RecipesViewModel()
     var index: Int = 10
+    @State private var isSheetUp = false
+    @State var screenWidth: CGFloat = 0.0
     @State var scrollPosition: ScrollPosition = ScrollPosition()
+    @ObservedObject var cookViewModel = CookViewModel()
+    @State var countdown: (minutes: Int, seconds: Int)? = (0,0)
     var body: some View {
+        let recipes = recipesViewModel.networkManager.jsonData?.recipes[index]
+        
         GeometryReader { proxy in
+            Color.clear
+                .onAppear{
+                    screenWidth = proxy.size.width/3
+                }
             
             ZStack(alignment: .bottomTrailing){
                 
@@ -71,9 +82,15 @@ struct RecipeView: View {
             .scrollPosition($scrollPosition)
             .padding(.top, 40)
                 
-            CookView(maxWidth: (proxy.size.width * 0.1))
+                CookView(isSheetUp: $isSheetUp, maxWidth: (proxy.size.width * 0.1))
                   
         }
+            .sheet(isPresented: $isSheetUp) {
+                
+                
+                
+                SheetView(cookViewModel: cookViewModel, countDown: $countdown, screenWidth: $screenWidth, isSheetUp: $isSheetUp, imageUrl: recipes?.image ?? "", cookingTime: recipes?.cookTimeMinutes ?? 0)
+            }
     }
     }
 }
@@ -82,10 +99,11 @@ struct RecipeContent: View {
     let proxy: GeometryProxy
     @ObservedObject var recipesViewModel: RecipesViewModel
     var index: Int
+    
     @Binding var  scrollPosition: ScrollPosition
     var body: some View {
         let widthPercentage = 0.9
-        let recipe = recipesViewModel.recipes?.recipes[index]
+        let recipe = recipesViewModel.networkManager.jsonData?.recipes[index]
 
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 10) {
@@ -214,7 +232,7 @@ struct RecipeContent: View {
 
 struct CookView: View{
     @State var width = 65.0
-    @State var isSheetUp = false
+    @Binding var isSheetUp: Bool
     var maxWidth = 0.0
     @StateObject var cookViewModel = CookViewModel()
     var body: some View{
@@ -229,29 +247,38 @@ struct CookView: View{
                                 LinearGradient(colors: [.red, .gray, .blue], startPoint: .topLeading, endPoint: .bottomTrailing), 2 :  LinearGradient(colors: [.blue, .gray, .red], startPoint: .topLeading, endPoint: .bottomTrailing),
                               3 : LinearGradient(colors: [.black, .gray, .black], startPoint: .topLeading, endPoint: .bottomTrailing)]
                 
-                PhaseAnimator(frames.keys) { eq in
-                    Image(systemName: "timer")
-                        .resizable()
-                        .scaledToFit()
-                        .padding(15)
-                        .background(.white)
-                        .clipShape(.circle)
-                        .overlay {
-                            
-                            Circle()
-                                .fill(frames[eq] ?? gradient)
-                                .frame(width: width + 5)
-                            
-                            
-                                .mask {
-                                    Circle().stroke()
-                                        .padding(2)
+                
+                if let timer = cookViewModel.timerManager {
+                    
+                } else {
+                    PhaseAnimator(frames.keys) { eq in
+                        Image(systemName: "timer")
+                            .resizable()
+                            .scaledToFit()
+                            .padding(15)
+                            .background(.white)
+                            .clipShape(.circle)
+                            .overlay {
+                                
+                                Circle()
+                                    .fill(frames[eq] ?? gradient)
+                                    .frame(width: width + 5)
+                                
+                                
+                                    .mask {
+                                        Circle().stroke()
+                                            .padding(2)
+                                    }
+                            }
+                            .foregroundStyle(eq == 1 ? .gray : .black)
+                            .onTapGesture {
+                                isSheetUp = true
                                 }
-                        }
-                        .foregroundStyle(eq == 1 ? .gray : .black)
-                } animation: { _ in
-                        .bouncy.delay(1)
+                    } animation: { _ in
+                            .bouncy.delay(1)
+                    }
                 }
+               
                 
                 
             }
@@ -382,113 +409,232 @@ struct InstructionsView: View {
         )    }
 }
 
+
+struct CookingTextView: View {
+    var width: CGFloat
+    var body: some View {
+        Text("Cooking")
+            .font(.system(size: width * 0.4 ,design: .rounded))
+            .foregroundStyle(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .bold()
+        .opacity(0.7)
+
+    }
+}
+
 struct SheetView: View {
     @ObservedObject var cookViewModel: CookViewModel
-    @State var countDown: (minutes: Int, seconds: Int)? = nil
-    @State var percentage = 0.0
-    @State var panFrameCount = 0
-    var cookingTime = 1
+    @Binding var countDown: (minutes: Int, seconds: Int)?
+    @State private var percentage = 0.0
+    @State private var panFrameCount = 0
+    @State private var whichCircleToAnimate = 0
+    @Binding var screenWidth: CGFloat
+    @State private var didTimerStop = false
+    @Binding var isSheetUp: Bool
+    @State var isAlertPresented = false
+    let imageUrl: String
+    private let cookingTimer = Timer.publish(every: 0.5, on: .main, in: .default).autoconnect()
+    var cookingTime: Int
+    
     var body: some View {
-        VStack{
-            VStack{
-                Text("Cooking..")
-                    .font(.system(.largeTitle,design: .rounded))
-                    .bold()
-                
-                VStack(alignment: .center, spacing: -10){
+        ZStack{
+            
+            ZStack{
+                LinearGradient(colors: [.purple, .white,.white,.white, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .opacity(0.3)
+                    .ignoresSafeArea()
+            }.blur(radius: 100)
+            
+            VStack(spacing: 0){
+                VStack{
                     
-               
-                Image(systemName: "flame")
                     
-                    .resizable()
-                    .scaledToFit()
-                    
-                    .foregroundStyle(panFrameCount.isMultiple(of: 5) ? .gray : .orange)
-                    .scaleEffect(x: panFrameCount.isMultiple(of: 5) ? 1.1 : 1 , y:panFrameCount.isMultiple(of: 5) ? 1.1 : 1)
-                    .frame(width: 50)
-                    .padding(.leading, -15)
-                    
-                Image(systemName: panFrameCount.isMultiple(of: 2) ? "frying.pan" : "frying.pan.fill")
-                    
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(x: panFrameCount.isMultiple(of: 3) ? 1.1 : 1 , y:panFrameCount.isMultiple(of: 3) ? 1.1 : 1)
-                    .frame(width: 150)
-                    .foregroundStyle(panFrameCount.isMultiple(of: 3) ? .gray : .black)
-            }
-            }
-                .padding(.top, 50)
-             
-            if let timeManager = cookViewModel.timerManager, let countDown {
-              
-                    GeometryReader{ proxy in
-                        let width = proxy.size.width * 0.3
-                        ZStack{
-                            HStack(spacing: 0){
-                                Text("\(countDown.minutes<=9 ? "0" : "")\(countDown.minutes)")
-                                    .lineLimit(1)
-                                    .frame(width: width, alignment: .trailing)
-                                Text(":")
-                                Text("\(countDown.seconds<=9 ? "0" : "")\(countDown.seconds)")
-                                    .lineLimit(1)
-                                    .frame(width: width, alignment: .leading)
-                            }
-                            .frame(width: proxy.size.width * 0.67, height: proxy.size.width * 0.67)
-                            .overlay(content: {
-                                Circle()
-                                    .stroke(.gray, lineWidth: 7)
-                                    
-                            })
+                    HStack(alignment: .bottom){
+                        
+                        VStack{
                             
-                            Color(.systemGray5)
+                            ZStack(alignment: .center){
+                                CookingTextView(width: screenWidth)
+                                
+                        }
+                            .frame(width: screenWidth * 1.5, height: 50)
+                           
+                    }
+                        
+                        ForEach(0..<3){ index in
+                            Circle()
+                                .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                .opacity(0.7)
+                                .frame(width: 10, alignment: .top)
+                                .offset(y: whichCircleToAnimate == index ? -10 : 0)
+                        }
+                        
+                    }
+                    .padding(.bottom, 25)
+                   
+                    Image("kitchen")
+                        .resizable()
+                        .scaledToFit()
+                        
+                        .frame(width: screenWidth * 2)
+                        .scaleEffect(x: didTimerStop ? 1.2 : 1, y: didTimerStop ? 1.2 : 1)
+
+                    
+                }
+                    .padding(.top, 50)
+                    .onReceive(cookingTimer) { _ in
+                        withAnimation(.spring.speed(0.5)) {
+                            if(!didTimerStop){
+                                
+                                
+                                whichCircleToAnimate = (whichCircleToAnimate + 1) % 3
+                            } else {
+                                whichCircleToAnimate = -1
+                            }
+                        }
+                    }
+                 
+                if let timeManager = cookViewModel.timerManager, let countDown {
+                  
+                        GeometryReader{ proxy in
+                            let width = proxy.size.width * 0.3
+                            ZStack{
+                               
+                                HStack(spacing: 0){
+                                    Text("\(countDown.minutes<=9 ? "0" : "")\(countDown.minutes)")
+                                        .font(.system(size: width/2, design: .rounded))
+                                        .lineLimit(1)
+                                        .frame(width: width, alignment: .trailing)
+                                        .opacity(0.7)
+                                        .foregroundStyle( LinearGradient(colors: [.purple,.black, .blue], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    Text(":")
+                                        .font(.system(size: width/2, design: .rounded))
+                                        
+                                        .opacity(0.7)
+                                        .foregroundStyle((LinearGradient(colors: [.darkGreen,.gray,.blue, .white], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                                    Text("\(countDown.seconds<=9 ? "0" : "")\(countDown.seconds)")
+                                        .font(.system(size: width/2, design: .rounded))
+                                        .lineLimit(1)
+                                        .frame(width: width, alignment: .leading)
+                                        .opacity(0.7)
+                                        .foregroundStyle( LinearGradient(colors: [.blue,.black, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                }
+                               
                                 .frame(width: proxy.size.width * 0.67, height: proxy.size.width * 0.67)
-                                .mask {
+                                
+                                .overlay(content: {
                                     Circle()
                                         .stroke(.gray, lineWidth: 7)
-                                    
-                                }
-                            
-                            Circle()
-                                .trim(from: 0.0, to: percentage)
-                                .stroke(style: .init(lineWidth: 13, lineCap: .round))
-                                .foregroundStyle(.darkGreen)
-                                .frame(width: proxy.size.width * 0.67, height: proxy.size.width * 0.67)
-                                .rotationEffect(.degrees(-90))
-                            
+                                        
+                                })
                                 
+                                Color(.lightGreen)
+                                    .frame(width: proxy.size.width * 0.67, height: proxy.size.width * 0.67)
+                                    .mask {
+                                        Circle()
+                                            .stroke(.gray, lineWidth: 7)
+                                        
+                                    }
+                                
+                                Circle()
+                                    .trim(from: 0.0, to: percentage)
+                                    .stroke(style: .init(lineWidth: 13, lineCap: .round))
+                                    .foregroundStyle((LinearGradient(colors: [.purple,.darkGreen, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                                    .frame(width: proxy.size.width * 0.67, height: proxy.size.width * 0.67)
+                                    .rotationEffect(.degrees(-90))
+                                
+                                    
+                                
+                            }
+                           
+                            .font(.system(size: proxy.size.width * 0.15, design: .rounded))
+                            .position(x: proxy.frame(in: .local).midX, y: proxy.frame(in: .local).midY)
                             
+                           
                         }
+                        .scaleEffect(x: didTimerStop ? 0.95 : 1 , y: didTimerStop ? 0.95 : 1)
+                        .padding(.top, 10)
                        
-                        .font(.system(size: proxy.size.width * 0.15, design: .rounded))
-                        .position(x: proxy.frame(in: .local).midX, y: proxy.frame(in: .local).midY)
+                    HStack{
+                        Image(systemName: didTimerStop ?  "play.circle" : "pause.circle")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 50)
+                            .opacity(0.7)
+                            .foregroundStyle(LinearGradient(colors: [.blue,.gray, .red], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .onTapGesture {
+                                withAnimation(.snappy) {
+                                    didTimerStop.toggle()
+                                }
+                            }
                         
-                       
-                    }
-                   
-            } else {
-                
-                
-                Text("Start Your timer")
+                        
+                        Image(systemName: "minus.circle")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 50)
+                            .foregroundStyle(.red)
+                            .opacity(0.7)
+                            .onTapGesture {
+                                isAlertPresented.toggle()
+                            }
+                                
+                                
+                                
+                                
+                                
+                               
+                            }
+                            .alert("Reset Timer?", isPresented: $isAlertPresented) {
+                                Button("Cancel", role: .cancel) {}
+                                
+                                Button("Reset", role: .destructive) {
+                                    withAnimation(.snappy) {
+                                        cookViewModel.timerManager?.timer.connect().cancel()
+                                        cookViewModel.timerManager = nil
+                                        isSheetUp = false
+                                    }
+                                }
+                            } message: {
+                                Text("This will reset the current countdown. Are you sure you want to proceed?")
+                            }
+                    
+                    
+                } else {
+                    
+                    
+                    Text("Start Your timer")
+                }
+               
+                    
+                Spacer()
             }
-           
-                
-            Button {
-                cookViewModel.startCookingTimer(startingDate: .now)
-            let _ = cookViewModel.timerManager?.timer.connect()
-            } label: {
-                Text("Click")
-            }
-            Spacer()
+
+            
         }
-        .padding(.top, 30)
+        .onAppear(){
+            print(cookViewModel)
+            if let count = countDown, count.minutes == 0 && count.seconds == 0{
+                self.cookViewModel.startCookingTimer(startingDate: .now)
+                
+                let _ = cookViewModel.timerManager?.timer.connect()
+                
+                countDown = cookViewModel.timerManager?.getTimeRemaining(cookingTimeMinutes: cookingTime)
+            }
+            
+        }
+       
         
-        if let timerManager = cookViewModel.timerManager {
+        
+        if let timerManager = cookViewModel.timerManager, !didTimerStop {
         VStack{
         }.onReceive(timerManager.timer) { date in
             withAnimation(.easeInOut(duration: 0.45)) {
                 timerManager.currentDate = date
                 percentage = timerManager.timeGonePercentage(cookingTimeMinutes: cookingTime)
                 panFrameCount += 1
+                
+              
             }
             
             
@@ -497,6 +643,8 @@ struct SheetView: View {
             timerManager.getTimeRemaining(cookingTimeMinutes: cookingTime)
             
             if(time.minutes * 60 + time.seconds <= 0){
+                
+                timerManager.timer.connect().cancel()
                 cookViewModel.timerManager = nil
                 countDown = nil
                
@@ -549,7 +697,6 @@ struct TagsView: View{
     }
 }
 #Preview {
-//    RecipeView()
+    RecipeView()
     
-    SheetView(cookViewModel: CookViewModel())
 }
