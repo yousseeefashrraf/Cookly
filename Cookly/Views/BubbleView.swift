@@ -2,6 +2,9 @@ import SwiftUI
 
 struct TimerIconView: View{
     @Binding var isSheetUp: Bool
+    @ObservedObject var cookViewModel: CookViewModel
+    @ObservedObject var recipesViewModel: RecipesViewModel
+
     var width: CGFloat
     var body: some View{
         let gradient =
@@ -36,6 +39,11 @@ struct TimerIconView: View{
                     .foregroundStyle(eq == 1 ? .gray : .black)
                     .onTapGesture {
                         isSheetUp = true
+                        if(cookViewModel.timerManager == nil){
+                            cookViewModel.startCookingTimer(startingDate: .now, cookingTime: recipesViewModel.currentRecipe?.cookTimeMinutes ?? 0)
+                        }
+                       
+                        
                         HapticFeedbackManager.manager.impact(style: .light)
                         }
                    
@@ -48,77 +56,23 @@ struct TimerIconView: View{
 }
 
 
-class BubbleViewModel: ObservableObject{
-    @Published var offsetPoint: CGPoint = .init(x: 0, y: 0)
-    @Published var isDrag = false
-    var width: CGFloat = 0.0
-    var screenSize: CGSize = CGSize.zero
-
-    init(offsetPoint: CGPoint, isDrag: Bool = false, width: CGFloat, screenSize: CGSize ) {
-        self.offsetPoint = offsetPoint
-        self.isDrag = isDrag
-        self.width = width
-        self.screenSize = screenSize
-
-    }
-    func updatingGesture(value: DragGesture.Value, state: inout Int, transaction: inout Transaction){
-        
-        if(abs(value.location.x)  < screenSize.width + width) && (value.location.x < 0){
-            withAnimation(.easeIn(duration: 0.2)){
-                offsetPoint.x = value.location.x
-            }
-           
-            
-        }
-        
-        if(abs(value.location.y)  < screenSize.height + width ) && (value.location.y + width < 40){
-            
-            withAnimation(.easeIn(duration: 0.2)){
-                offsetPoint.y = value.location.y
-            }
-           
-            
-            
-        }
-    }
-    
-    func endGestureAction(){
-        withAnimation(.bouncy) {
-            isDrag = false
-        }
-        if(abs(offsetPoint.x)  <
-           screenSize.width/2) {
-            withAnimation(.bouncy) {
-                offsetPoint.x = 0
-            }
-
-            
-            
-        } else {
-            withAnimation(.bouncy) {
-                offsetPoint.x = -(screenSize.width - width - 20)
-            }
-            
-        }
-    }
-}
-
-
 
 struct BubbleView: View{
     var width = 65.0
     @Binding var isSheetUp: Bool
     @ObservedObject var cookViewModel: CookViewModel //this should be observed object
+    @ObservedObject var recipesViewModel: RecipesViewModel //this should be observed object
+
     @StateObject var bubbleViewModel: BubbleViewModel
     var screenSize: CGSize
     
-    init(width: Double = 65.0, isSheetUp: Binding<Bool>, offsetPoint: CGPoint, cookViewModel: CookViewModel, isDrag: Bool = false, bubbleViewModel: BubbleViewModel, screenSize: CGSize) {
+    init(width: Double = 65.0, isSheetUp: Binding<Bool>, cookViewModel: CookViewModel, isDrag: Bool = false, screenSize: CGSize, recipesViewModel: RecipesViewModel) {
         self.width = width
         self._isSheetUp = isSheetUp
         self.cookViewModel = cookViewModel
         self.screenSize = screenSize
-
-        self._bubbleViewModel = StateObject(wrappedValue: BubbleViewModel(offsetPoint: offsetPoint, isDrag: isDrag, width: width, screenSize: screenSize))
+        self.recipesViewModel = recipesViewModel
+        self._bubbleViewModel = StateObject(wrappedValue: BubbleViewModel(isDrag: isDrag, width: width, screenSize: screenSize))
     }
     
     var body: some View{
@@ -126,7 +80,7 @@ struct BubbleView: View{
         let offsetPoint = bubbleViewModel.offsetPoint
         if (cookViewModel.isShown) {
             VStack{
-                TimerIconView(isSheetUp: $isSheetUp, width: width)
+                TimerIconView(isSheetUp: $isSheetUp, cookViewModel: cookViewModel, recipesViewModel: recipesViewModel, width: width)
             }
             
             .scaleEffect(x: isDrag ? 1.2 : 1, y: isDrag ? 1.2 : 1)
@@ -147,6 +101,7 @@ struct BubbleView: View{
                     }
                     .onEnded({ _ in bubbleViewModel.endGestureAction() })
             )
+            
         }
     }
 }
@@ -160,7 +115,3 @@ struct BubbleView: View{
 
 
 
-
-#Preview {
-    
-}

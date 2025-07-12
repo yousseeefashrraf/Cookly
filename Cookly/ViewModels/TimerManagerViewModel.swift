@@ -2,8 +2,12 @@ import SwiftUI
 
 class TimerManagerViewModel: ObservableObject{
     let timer: Timer.TimerPublisher
-    @Published var currentDate: Date
-    @Published var fireDate: Date
+    var currentDate: Date
+    var fireDate: Date
+    @Published var percentage: CGFloat
+    var endDate: Date
+    var pauseDate: Date?
+    @Published var didTimerStop: Bool
     
     var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -12,10 +16,26 @@ class TimerManagerViewModel: ObservableObject{
         return formatter
     }
     
-    init(currentDate: Date, fireDate: Date) {
-        self.timer = Timer.publish(every: 1.0, on: .main, in: .default)
+
+    init(currentDate: Date, fireDate: Date, cookingTime: Int) {
+        self.timer = Timer.publish(every: 1.0, on: .current, in: .default)
         self.currentDate = currentDate
         self.fireDate = fireDate
+        self.endDate = fireDate.addingTimeInterval(TimeInterval(cookingTime * 60))
+        self.didTimerStop = false
+        self.pauseDate = nil
+        self.didTimerStop = false
+        self.percentage = 0
+
+    }
+    
+    func delayEndTime(){
+        if let pauseDate{
+            let pausedDuration = Date().timeIntervalSince(pauseDate)
+            endDate = endDate.addingTimeInterval(pausedDuration)
+            self.pauseDate = nil
+            currentDate = .now
+        }
     }
     
     func getIntervalSinceFiring() -> DateComponents{
@@ -25,29 +45,32 @@ class TimerManagerViewModel: ObservableObject{
         return sinceFiring
     }
     
-    func getTimeRemaining(cookingTimeMinutes cookingTime: Int) -> (minutes: Int, seconds: Int){
+    func getTimeRemaining() -> (minutes: Int, seconds: Int) {
         
-        let endDate = fireDate.addingTimeInterval(TimeInterval(cookingTime * 60))
-        let timeRemaining = Calendar.current.dateComponents([.minute, .second], from: currentDate, to: endDate)
-        
-        let remainingTime = (minutes:   timeRemaining.minute ?? 0
-                             , seconds: timeRemaining.second ?? 0)
-        
-        return remainingTime
-    }
-    
-    func timeGonePercentage(cookingTimeMinutes cookingTime: Int) -> Double{
-        
-        let currentTime = getIntervalSinceFiring()
-        
-        guard let minutes = currentTime.minute, let seconds = currentTime.second else {
-            return 0
+        if didTimerStop {
+            if pauseDate == nil {
+                pauseDate = .now
+            } else {
+                delayEndTime()
+                pauseDate = .now
+            }
+        } else {
+            pauseDate = nil
         }
-        let gone = Double(minutes * 60 + seconds)
+
+        let timeRemaining = Calendar.current.dateComponents([.minute, .second], from: currentDate, to: endDate)
+        return (minutes: timeRemaining.minute ?? 0, seconds: timeRemaining.second ?? 0)
+    }
+
+    
+    func updatePercentage(cookingTimeMinutes cookingTime: Int) -> Double{
+        
+        let currentTime = getTimeRemaining()
+        
+        let left = Double(currentTime.minutes * 60 + currentTime.seconds)
         let total = Double(cookingTime * 60)
-        let percentage = gone / total
-        
-        return percentage
-        
+        let percentage = left / total
+        self.percentage = percentage
+        return 1-percentage
     }
 }

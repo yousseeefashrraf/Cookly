@@ -4,7 +4,7 @@ import SwiftUI
 struct CooklyApp: App {
     var body: some Scene {
         WindowGroup {
-            RecipeView()
+            AppStarterMainView()
         }
     }
 }
