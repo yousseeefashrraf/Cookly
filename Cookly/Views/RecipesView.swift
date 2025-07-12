@@ -224,7 +224,7 @@ struct RecipesViewScrollView: View{
     
     var body: some View{
         ScrollView(.horizontal){
-            HStack(spacing: 10){
+            LazyHStack(spacing: 10){
                 ForEach(content, id: \.name) { recipe in
                     let widthPercentage = 0.80
                     let itemRect = allRects[recipe.name] ?? .zero
