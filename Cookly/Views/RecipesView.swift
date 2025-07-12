@@ -1,8 +1,8 @@
 //
-//  RecipesViewModel.swift
+//  RecipesView.swift
 //  Cookly
 //
-//  Created by Youssef Ashraf on 10/07/2025.
+//  Created by Youssef Ashraf on 11/07/2025.
 //
 
 import SwiftUI
@@ -14,5 +14,5 @@ struct RecipesView: View {
 }
 
 #Preview {
-    RecipesViewModel()
+    RecipesView()
 }
