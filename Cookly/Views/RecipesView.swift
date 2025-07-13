@@ -2,7 +2,7 @@ import SwiftUI
 struct ScrollCalculator{
     static func getPercentage(containerProxy: GeometryProxy, ItemRect: CGRect, offset: CGFloat) -> CGFloat{
         
-        let optimum = containerProxy.size.width * 0.85
+        let optimum = containerProxy.size.width * 0.9
         
         
         
@@ -10,8 +10,8 @@ struct ScrollCalculator{
         let currentItemPosition = abs(ItemRect.maxX)
         let percentage = currentItemPosition/optimum
         
-        if(percentage > 1.1){
-            return 0.8
+        if(percentage > 1){
+            return max(1-(percentage-1),0.7)
         }
         
         return max(percentage,0.7)
@@ -275,7 +275,6 @@ struct RecipesViewScrollView: View{
         
         .contentMargins(contentMargin)
         .scrollIndicators(.hidden)
-        .scrollTargetBehavior(.viewAligned)
     }
 }
 
